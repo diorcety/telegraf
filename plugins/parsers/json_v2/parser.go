@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"sort"
 
 	"github.com/dimchansky/utfbom"
 	"github.com/tidwall/gjson"
@@ -727,6 +728,79 @@ func (p *Parser) checkResult(result gjson.Result, path string) error {
 }
 
 func init() {
+	gjson.AddModifier("fill", func(json, arg string) string {
+		arr := gjson.Parse(json)
+		if !arr.IsArray() {
+			return ""
+		}
+		var last gjson.Result
+		items := make(map[string][2]gjson.Result)
+		arr.ForEach(func(_, value gjson.Result) bool {
+			if value.IsObject() {
+				value.ForEach(func(key, value gjson.Result) bool {
+					items[key.String()] = [2]gjson.Result{key, value}
+					return true
+				})
+			} else {
+				last = value
+			}
+			return true
+		})
+		if !last.IsArray() {
+			return ""
+		}
+		oitems := make([][2]gjson.Result, 0, len(items))
+		for _, item := range items {
+			oitems = append(oitems, item)
+		}
+		sort.Slice(oitems, func(i, j int) bool {
+			return oitems[i][0].Less(oitems[j][0], false)
+		})
+		var out []byte
+		out = append(out, '[')
+		var i int
+		last.ForEach(func(_, value gjson.Result) bool {
+			if !value.IsObject() {
+				// Skip non-objects
+				return true
+			}
+			if i > 0 {
+				out = append(out, ',')
+			}
+			out = append(out, '{')
+			var j int
+			for _, item := range oitems {
+				var found bool
+				// Only replace values that do not already exist.
+				value.ForEach(func(key, _ gjson.Result) bool {
+					if key.String() == item[0].String() {
+						found = true
+						return false
+					}
+					return true
+				})
+				if found {
+					continue
+				}
+				if j > 0 {
+					out = append(out, ',')
+				}
+				out = append(out, item[0].Raw...)
+				out = append(out, ':')
+				out = append(out, item[1].Raw...)
+				j++
+			}
+			suffix := strings.TrimSpace(value.Raw[1:])
+			if len(suffix) > 0 && suffix[0] != '}' && j > 0 {
+				out = append(out, ',')
+			}
+			out = append(out, suffix...)
+			i++
+			return true
+		})
+		out = append(out, ']')
+		return string(out)
+	})
 	// Register all variants
 	parsers.Add("json_v2",
 		func(defaultMetricName string) telegraf.Parser {
