@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"errors"
 
 	"github.com/dimchansky/utfbom"
 	"github.com/tidwall/gjson"
@@ -344,8 +345,9 @@ func (p *Parser) expandArray(result MetricNode, timestamp time.Time) ([]telegraf
 				n.Result = val
 				n.Index = val.Index - result.Index
 				n.ParentIndex = n.Index + result.ParentIndex
-				r, err := p.combineObject(n, timestamp)
-				if err != nil {
+				r, sub_err := p.combineObject(n, timestamp)
+				if sub_err != nil {
+					err = errors.Join(err, sub_err)
 					return false
 				}
 
@@ -364,8 +366,9 @@ func (p *Parser) expandArray(result MetricNode, timestamp time.Time) ([]telegraf
 			n.Result = val
 			n.Index = val.Index - result.Index
 			n.ParentIndex = n.Index + result.ParentIndex
-			r, err := p.expandArray(n, timestamp)
-			if err != nil {
+			r, sub_err := p.expandArray(n, timestamp)
+			if sub_err != nil {
+				err = errors.Join(err, sub_err)
 				return false
 			}
 			results = append(results, r...)
@@ -584,15 +587,18 @@ func (p *Parser) combineObject(result MetricNode, timestamp time.Time) ([]telegr
 			arrayNode.Tag = tag
 
 			if val.IsObject() {
-				results, err = p.combineObject(arrayNode, timestamp)
-				if err != nil {
+				var sub_err error
+				results, sub_err = p.combineObject(arrayNode, timestamp)
+				if sub_err != nil {
+					err = errors.Join(err, sub_err)
 					return false
 				}
 			} else {
 				arrayNode.Index -= result.Index
 				arrayNode.ParentIndex -= result.Index
-				r, err := p.expandArray(arrayNode, timestamp)
-				if err != nil {
+				r, sub_err := p.expandArray(arrayNode, timestamp)
+				if sub_err != nil {
+					err = errors.Join(err, sub_err)
 					return false
 				}
 				results = cartesianProduct(r, results)
