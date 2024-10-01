@@ -595,8 +595,10 @@ func (a *Agent) gatherOnce(
 		case err := <-done:
 			return err
 		case <-slowWarning.C:
-			log.Printf("W! [%s] Collection took longer than expected; not complete after interval of %s",
-				input.LogName(), interval)
+			if input.IsConnected() {
+				log.Printf("W! [%s] Collection took longer than expected; not complete after interval of %s",
+					input.LogName(), interval)
+			}
 			input.IncrGatherTimeouts()
 		case <-ticker.Elapsed():
 			log.Printf("D! [%s] Previous collection has not completed; scheduled collection skipped",

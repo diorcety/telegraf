@@ -239,6 +239,14 @@ func (r *RunningInput) Log() telegraf.Logger {
 	return r.log
 }
 
+func (r *RunningInput) IsConnected() bool {
+	ci, ok := r.Input.(telegraf.ConnectedInput)
+	if ok {
+		return ci.IsConnected()
+	}
+	return true
+}
+
 func (r *RunningInput) IncrGatherTimeouts() {
 	GlobalGatherTimeouts.Incr(1)
 	r.GatherTimeouts.Incr(1)

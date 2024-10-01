@@ -8,6 +8,12 @@ type Input interface {
 	Gather(Accumulator) error
 }
 
+type ConnectedInput interface {
+	Input
+
+	IsConnected() bool
+}
+
 type ServiceInput interface {
 	Input
 

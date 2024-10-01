@@ -565,6 +565,10 @@ func (m *Modbus) Printf(format string, v ...interface{}) {
 	m.Log.Debugf(format, v...)
 }
 
+func (m *Modbus) IsConnected() bool {
+	return m.isConnected
+}
+
 // Add this plugin to telegraf
 func init() {
 	inputs.Add("modbus", func() telegraf.Input { return &Modbus{} })
