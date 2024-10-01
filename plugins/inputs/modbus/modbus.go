@@ -29,6 +29,9 @@ var errAddressOverflow = errors.New("address overflow")
 
 type ModbusWorkarounds struct {
 	AfterConnectPause       config.Duration `toml:"pause_after_connect"`
+	RetryDelay              config.Duration `toml:"retry_delay"`
+	RetryDelayFactor        float32         `toml:"retry_delay_factor"`
+	RetryDelayMax           config.Duration `toml:"retry_delay_max"`
 	PollPause               config.Duration `toml:"pause_between_requests"`
 	CloseAfterGather        bool            `toml:"close_connection_after_gather"`
 	OnRequestPerField       bool            `toml:"one_request_per_field"`
@@ -67,6 +70,8 @@ type Modbus struct {
 	ConfigurationOriginal
 	ConfigurationPerRequest
 	ConfigurationPerMetric
+
+	RetryDelay  time.Duration
 
 	// Connection handling
 	client      mb.Client
@@ -353,9 +358,25 @@ func (m *Modbus) initClient() error {
 func (m *Modbus) connect() error {
 	err := m.handler.Connect()
 	m.isConnected = err == nil
-	if m.isConnected && m.Workarounds.AfterConnectPause != 0 {
-		nextRequest := time.Now().Add(time.Duration(m.Workarounds.AfterConnectPause))
-		time.Sleep(time.Until(nextRequest))
+	if m.isConnected {
+		m.RetryDelay = 0
+		if m.Workarounds.AfterConnectPause != 0 {
+			nextRequest := time.Now().Add(time.Duration(m.Workarounds.AfterConnectPause))
+			time.Sleep(time.Until(nextRequest))
+		}
+	} else {
+		if m.RetryDelay == 0 {
+			m.RetryDelay = time.Duration(m.Workarounds.RetryDelay)
+		} else if m.Workarounds.RetryDelayFactor > 1 {
+			m.RetryDelay = time.Duration(int(float32(m.RetryDelay) * m.Workarounds.RetryDelayFactor))
+		}
+		if m.Workarounds.RetryDelayMax > 0 {
+			m.RetryDelay = min(m.RetryDelay, time.Duration(m.Workarounds.RetryDelayMax))
+		}
+		if m.RetryDelay > 0 {
+			nextRequest := time.Now().Add(time.Duration(m.RetryDelay))
+			time.Sleep(time.Until(nextRequest))
+		}
 	}
 	return err
 }
