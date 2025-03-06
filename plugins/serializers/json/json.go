@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"strconv"
 
 	"github.com/blues/jsonata-go"
 
@@ -21,8 +22,18 @@ type Serializer struct {
 	Transformation      string          `toml:"json_transformation"`
 	NestedFieldsInclude []string        `toml:"json_nested_fields_include"`
 	NestedFieldsExclude []string        `toml:"json_nested_fields_exclude"`
+	ForceFloat          bool            `toml:"json_force_float"`
 
 	nestedfields filter.Filter
+}
+
+type KeepZero float64
+
+func (f KeepZero) MarshalJSON() ([]byte, error) {
+	if float64(f) == float64(int(f)) {
+		return []byte(strconv.FormatFloat(float64(f), 'f', 1, 32)), nil
+	}
+	return []byte(strconv.FormatFloat(float64(f), 'f', -1, 32)), nil
 }
 
 func (s *Serializer) Init() error {
@@ -125,6 +136,9 @@ func (s *Serializer) createObject(metric telegraf.Metric) map[string]interface{}
 			// JSON does not support these special values
 			if math.IsNaN(fv) || math.IsInf(fv, 0) {
 				continue
+			}
+			if s.ForceFloat {
+				val = KeepZero(fv)
 			}
 		case string:
 			// Check for nested fields if any
